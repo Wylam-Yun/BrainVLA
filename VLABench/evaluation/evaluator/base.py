@@ -89,7 +89,24 @@ class Evaluator:
                     task_infos.append(info)
                 except Exception as e:
                     print(e)
-                    traceback.print_exc()
+                    tb = traceback.format_exc()
+                    print(tb)
+                    if self.episode_config is None:
+                        episode_config = None
+                        seed = 42 + i
+                    else:
+                        episode_config = self.episode_config[task][i]
+                        seed = None
+                    task_infos.append(
+                        self.build_exception_info(
+                            task_name=task,
+                            episode_id=i,
+                            episode_config=episode_config,
+                            seed=seed,
+                            exception=e,
+                            traceback_text=tb,
+                        )
+                    )
                     
             metric_score = self.compute_metric(task_infos)       
             metrics[task] = metric_score
@@ -107,6 +124,22 @@ class Evaluator:
                 with open(os.path.join(self.save_dir, task, f"detail_info.json"), "w") as f:
                     json.dump(task_infos, f, indent=4)
         return metrics
+
+    def build_exception_info(self, task_name, episode_id, episode_config, seed, exception, traceback_text):
+        return {
+            "task": task_name,
+            "episode_id": episode_id,
+            "success": False,
+            "consumed_step": 0,
+            "intention_score": 0.0,
+            "progress_score": 0.0,
+            "exception": True,
+            "exception_type": type(exception).__name__,
+            "exception_message": str(exception),
+            "traceback": traceback_text,
+            "seed": seed,
+            "episode_config": episode_config,
+        }
         
     def evaluate_single_episode(self, agent, task_name, episode_id, episode_config, seed=42, max_episode_length=200, **kwargs):
         """
@@ -169,10 +202,17 @@ class Evaluator:
         intention_score =  env.get_intention_score(threshold=self.intention_score_threshold)
         progress_score = env.get_task_progress()
         info["task"] = task_name
+        info["episode_id"] = episode_id
         info["success"] = success
         info["consumed_step"] = i
         info["intention_score"] = intention_score
         info["progress_score"] = progress_score
+        info["exception"] = False
+        info["exception_type"] = None
+        info["exception_message"] = None
+        info["traceback"] = None
+        info["seed"] = seed if episode_config is None else None
+        info["episode_config"] = episode_config
         
         env.close()
         if self.save_dir is not None and self.visulization:
